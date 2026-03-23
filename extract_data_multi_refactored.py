@@ -67,10 +67,11 @@ def print_h5_structure(h5_path: Union[str, Path]) -> None:
 def is_sensor_group(name: str, obj: h5py.Group) -> bool:
     """
     Decide if a group is a 'sensor group'.
-    Default logic: group whose last path component is all digits (e.g. '19392').
+    Default logic: group directly under /Sensors whose last path component is all
+    digits (e.g. /Sensors/19392).
     """
-    sensor_id = name.strip("/").split("/")[-1]
-    return sensor_id.isdigit()
+    parts = name.strip("/").split("/")
+    return len(parts) == 2 and parts[0] == "Sensors" and parts[1].isdigit()
 
 
 def find_sensor_groups(f: h5py.File) -> List[h5py.Group]:
@@ -102,6 +103,8 @@ def categorize_datasets(
     def _visitor(name, obj):
         if not isinstance(obj, h5py.Dataset):
             return
+        if "/" in name:
+            return
         full_name = obj.name.lower()
 
         if any(k in full_name for k in time_keywords):
@@ -111,7 +114,7 @@ def categorize_datasets(
         if any(k in full_name for k in gyro_keywords):
             gyro_ds.append(obj)
 
-    sensor_group.file.visititems(_visitor)
+    sensor_group.visititems(_visitor)
 
     return {
         "time": time_ds,

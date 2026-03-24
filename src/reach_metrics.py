@@ -267,6 +267,10 @@ def summarize_pickle_to_dataframe(
     rows: list[dict[str, Any]] = []
     for csv_stem, reach_dict in data.items():
         for reach_id, reach_df in reach_dict.items():
+            start_time_s = None
+            if "time" in reach_df.columns and not reach_df.empty:
+                start_time_s = float(reach_df["time"].iloc[0])
+
             m = compute_reach_metrics(
                 reach_df,
                 movement_unit_signal=movement_unit_signal,
@@ -277,6 +281,7 @@ def summarize_pickle_to_dataframe(
                 "pickle_file": str(Path(pkl_path).name),
                 "csv_stem": csv_stem,
                 "reach_id": reach_id,
+                "start_time_s": start_time_s,
 
                 "duration_s": m.duration_s,
 

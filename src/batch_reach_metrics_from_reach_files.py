@@ -101,6 +101,9 @@ def process_participant_folder(
             rows: List[Dict[str, Any]] = []
 
             for reach_id, reach_df in reach_dict.items():
+                start_time_s = None
+                if "time" in reach_df.columns and not reach_df.empty:
+                    start_time_s = float(reach_df["time"].iloc[0])
 
                 m = compute_reach_metrics(
                     reach_df,
@@ -114,6 +117,7 @@ def process_participant_folder(
                     "reach_file": pkl_path.name,
                     "sensor_id": sid,
                     "reach_id": reach_id,
+                    "start_time_s": start_time_s,
 
                     "duration_s": m.duration_s,
                     "peak_speed": m.peak_speed,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -12,6 +13,103 @@ from src.batch_reach_metrics_from_reach_files import process_all_participants
 
 
 DETECTOR_MODES = ("fixed", "adaptive_baseline")
+
+
+def run_git_command(repo_root: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def get_repo_root(start_dir: Optional[Path] = None) -> Optional[Path]:
+    repo_probe_dir = (start_dir or Path(__file__).resolve().parent).resolve()
+    result = run_git_command(repo_probe_dir, ["rev-parse", "--show-toplevel"])
+    if result.returncode != 0:
+        return None
+    return Path(result.stdout.strip())
+
+
+def sync_repo_with_main(repo_root: Optional[Path] = None) -> None:
+    """
+    If this script is running from a clean checkout on branch 'main', fetch and
+    fast-forward to origin/main before the pipeline begins.
+
+    Any non-clean or non-main state is left untouched so local work is not
+    merged or overwritten unexpectedly.
+    """
+    resolved_repo_root = get_repo_root(repo_root)
+    if resolved_repo_root is None:
+        print("Git update check skipped: current folder is not inside a git repository.")
+        return
+
+    branch_result = run_git_command(resolved_repo_root, ["branch", "--show-current"])
+    if branch_result.returncode != 0:
+        print("Git update check skipped: could not determine current branch.")
+        return
+    current_branch = branch_result.stdout.strip()
+    if current_branch != "main":
+        print(
+            f"Git update check skipped: current branch is '{current_branch}', "
+            "not 'main'."
+        )
+        return
+
+    status_result = run_git_command(resolved_repo_root, ["status", "--porcelain"])
+    if status_result.returncode != 0:
+        print("Git update check skipped: could not read working tree status.")
+        return
+    if status_result.stdout.strip():
+        print(
+            "Git update check skipped: repository has uncommitted changes. "
+            "Commit or stash them before auto-pulling from main."
+        )
+        return
+
+    print("Checking for updates from origin/main...")
+    fetch_result = run_git_command(resolved_repo_root, ["fetch", "origin", "main"])
+    if fetch_result.returncode != 0:
+        fetch_error = fetch_result.stderr.strip() or fetch_result.stdout.strip()
+        print(f"Git update check skipped: fetch failed. {fetch_error}")
+        return
+
+    ahead_behind = run_git_command(
+        resolved_repo_root,
+        ["rev-list", "--left-right", "--count", "HEAD...origin/main"],
+    )
+    if ahead_behind.returncode != 0:
+        print("Git update check skipped: could not compare local main to origin/main.")
+        return
+
+    try:
+        ahead_str, behind_str = ahead_behind.stdout.strip().split()
+        ahead_count = int(ahead_str)
+        behind_count = int(behind_str)
+    except ValueError:
+        print("Git update check skipped: unexpected branch comparison output.")
+        return
+
+    if behind_count == 0:
+        print("Repository is already up to date with origin/main.")
+        return
+
+    if ahead_count > 0:
+        print(
+            "Git update check skipped: local main has commits not on origin/main, "
+            "so auto-pull was not attempted."
+        )
+        return
+
+    pull_result = run_git_command(resolved_repo_root, ["pull", "--ff-only", "origin", "main"])
+    if pull_result.returncode != 0:
+        pull_error = pull_result.stderr.strip() or pull_result.stdout.strip()
+        print(f"Git update check failed during pull. {pull_error}")
+        return
+
+    print("Pulled the latest changes from origin/main.")
 
 
 def iter_participant_dirs(raw_data_root: Path) -> Iterable[Path]:
@@ -425,7 +523,15 @@ def main():
         default=None,
         help="Comma-separated sensor IDs to exclude, for example '17738,21263'.",
     )
+    parser.add_argument(
+        "--skip-git-update-check",
+        action="store_true",
+        help="Skip checking for and pulling updates from origin/main before the pipeline runs.",
+    )
     args = parser.parse_args()
+
+    if not args.skip_git_update_check:
+        sync_repo_with_main()
 
     project_root = resolve_project_root(args.project_root)
     raw_data_root = project_root / "Raw_Data"

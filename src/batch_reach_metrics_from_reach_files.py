@@ -7,7 +7,7 @@ from typing import Dict, Any, List, Optional
 
 import pandas as pd
 
-from reach_metrics import compute_reach_metrics
+from src.reach_metrics import compute_reach_metrics
 
 
 # --------------------------------------------

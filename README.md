@@ -1,247 +1,290 @@
-1. Temporal metrics
-Duration of the reach (duration_s)
+# HDF5 Processing
 
-What it is:
-The total time from the beginning of the reach to the end.
+This repository takes wearable sensor data stored in `.h5` files and turns it into easier-to-use CSV files and reach summaries.
 
-How it’s computed:
+In simple terms, it does this:
 
-duration = time_last − time_first
+1. Reads raw sensor recordings from `Raw_Data`
+2. Exports the raw accelerometer and gyroscope data for each sensor to CSV files
+3. Preprocesses those CSV files so they are easier to analyze
+4. Detects reaches from the processed motion data
+5. Calculates reach metrics and saves them to summary CSV files
 
+## What This Repo Is For
 
-What it tells you:
+This project is designed for data collected from multiple sensors during movement trials.
 
-How long the reach takes
+The pipeline helps you go from:
 
-Longer durations often indicate slower, more deliberate movements
+- raw `.h5` sensor recordings
 
-Short durations often indicate fast or ballistic reaches
+to:
 
-Time to peak speed (time_to_peak_speed_s)
+- per-sensor raw CSV files
+- per-sensor processed CSV files
+- detected reach segments
+- reach metric summary files
 
-What it is:
-The elapsed time from reach start until the maximum speed occurs.
+You do not need to manually edit the code each time you run it. The main script can prompt you for the project folder and which participants you want to process.
 
-How it’s computed:
+## Typical Folder Setup
 
-Velocity magnitude is computed over time
+Your project folder should contain a `Raw_Data` folder.
 
-The time index of the maximum is located
+Example:
 
-The start time is subtracted
+```text
+Project/
+  Raw_Data/
+    Participant 1/
+      rawData/
+        20251017-090642_Free_Form.h5
+        20251017-090827_Free_Form.h5
+      SubjectMetadata.xml
+      Free Form_trials.csv
+    Participant 2/
+      rawData/
+        ...
+```
 
-What it tells you:
+The pipeline will create the output folders for you inside that same project folder.
 
-Motor planning vs. control
+## What The User Will Be Prompted To Provide
 
-Fast time-to-peak suggests ballistic movement
+When you run the main pipeline, the program may prompt you for:
 
-Slower time-to-peak suggests online feedback or hesitation
+1. The project folder
+   This is the folder that contains `Raw_Data`.
 
-2. Velocity & speed metrics
+2. Which participants to process
+   You can choose:
+   - `all`
+   - a few participants by number, like `1,2`
+   - exact folder names, like `Participant 1,Participant 2`
 
-Velocity is a vector (direction + magnitude)
-Speed is the magnitude only (always ≥ 0)
+3. The reach detector mode
+   Current choices are:
+   - `fixed`
+   - `adaptive_baseline`
 
-Peak velocity magnitude (peak_velocity_mag, peak_speed)
+4. Which sensors to include
+   You can:
+   - leave this blank to include all sensors
+   - enter a comma-separated list such as `17738,21263`
 
-What it is:
-The highest instantaneous movement speed during the reach.
+5. Which sensors to exclude
+   You can:
+   - leave this blank to exclude no sensors
+   - enter a comma-separated list such as `17794,21146`
 
-How it’s computed:
+If you prefer, you can also provide these from the command line instead of answering prompts.
 
-Acceleration is integrated to velocity
+## Main Script
 
-Vector magnitude is taken
+The main entry point is:
 
-Maximum value is selected
+- [main.py](/c:/Users/katel/Desktop/HDF5%20Processing/main.py)
 
-What it tells you:
+To run it:
 
-Maximum movement intensity
+```powershell
+python main.py
+```
 
-Strongly correlated with effort and motor vigor
+You can also run it with options:
 
-Often reduced in motor impairment
+```powershell
+python main.py --project-root "C:\path\to\Project"
+```
 
-Average velocity vector (avg_velocity_vec)
+```powershell
+python main.py --project-root "C:\path\to\Project" --participants "all" --detector-mode fixed
+```
 
-What it is:
-The mean velocity vector over the entire reach.
+```powershell
+python main.py --project-root "C:\path\to\Project" --participants "Participant 1" --sensor-exclude "17794,21146"
+```
 
-How it’s computed:
+## What Files Are Generated
 
-average velocity = total displacement / total duration
+The pipeline creates several folders inside your selected project folder.
 
+### 1. `Output_CSVs`
 
-What it tells you:
+This contains raw sensor data exported from the `.h5` files.
 
-Net movement direction
+Example:
 
-Directional bias across reaches
+```text
+Output_CSVs/
+  Participant 1/
+    20251017-090642_Free_Form/
+      20251017-090642_Free_Form_sensor-17738.csv
+      20251017-090642_Free_Form_sensor-17794.csv
+```
 
-Useful for task-space analysis
+These files usually contain:
 
-Average velocity magnitude (avg_velocity_mag)
+- `time`
+- accelerometer columns
+- gyroscope columns
+- orientation columns when available
 
-What it is:
-The magnitude of the average velocity vector.
+### 2. `Processed_CSVs`
 
-Important distinction:
-This is not the same as average speed.
+This contains cleaned and preprocessed sensor data.
 
-What it tells you:
+Example:
 
-How straight the reach is
+```text
+Processed_CSVs/
+  Participant 1/
+    20251017-090642_Free_Form/
+      20251017-090642_Free_Form_sensor-17738_preprocessed.csv
+```
 
-Curved or oscillatory paths reduce this value
+These files usually contain:
 
-Average speed (avg_speed)
+- `time`
+- filtered acceleration
+- gravity-compensated linear acceleration
+- filtered gyroscope
+- corrected gyroscope
 
-What it is:
-The mean of instantaneous speed over the reach.
+### 3. `Reach_Files`
 
-How it’s computed:
+This contains detected reach segments saved as `.pkl` files.
 
-avg_speed = mean(|velocity|)
+Example:
 
+```text
+Reach_Files/
+  Participant 1/
+    20251017-090642_Free_Form.pkl
+```
 
-What it tells you:
+These files are intermediate analysis files used by the pipeline.
 
-Overall movement intensity
+### 4. `Reach_Metrics`
 
-Unlike avg_velocity_mag, it does not cancel reversals
+This contains the final summary CSV files for detected reaches.
 
-3. Path geometry
-Path length (path_length)
+Example:
 
-What it is:
-The total distance traveled during the reach.
+```text
+Reach_Metrics/
+  Participant 1/
+    20251017-090642_Free_Form/
+      reach_metrics_sensor-17738.csv
+      reach_metrics_sensor-21146.csv
+```
 
-How it’s computed:
+These files contain one row per detected reach and include measurements such as:
 
-path length = ∫ speed(t) dt
+- reach duration
+- peak speed
+- average speed
+- path length
+- movement units
+- jerk metrics
 
+## What Each Script Does
 
-What it tells you:
+- [main.py](/c:/Users/katel/Desktop/HDF5%20Processing/main.py)
+  Runs the full pipeline and prompts the user for input.
 
-Movement efficiency
+- [extract_data_multi_refactored.py](/c:/Users/katel/Desktop/HDF5%20Processing/extract_data_multi_refactored.py)
+  Reads `.h5` files and exports raw per-sensor CSV files.
 
-Longer path than expected suggests:
+- [preprocess_data_refactored.py](/c:/Users/katel/Desktop/HDF5%20Processing/preprocess_data_refactored.py)
+  Converts raw sensor CSV files into processed CSV files for analysis.
 
-Corrections
+- [detect_reaches.py](/c:/Users/katel/Desktop/HDF5%20Processing/detect_reaches.py)
+  Finds candidate reaches in the processed motion data.
 
-Tremor
+- [reach_metrics.py](/c:/Users/katel/Desktop/HDF5%20Processing/reach_metrics.py)
+  Computes measurements for each detected reach.
 
-Lack of motor precision
+- [batch_reach_metrics_from_reach_files.py](/c:/Users/katel/Desktop/HDF5%20Processing/batch_reach_metrics_from_reach_files.py)
+  Turns detected reach files into summary CSVs.
 
-Common comparison:
+- [plot_random_raw_vs_processed.py](/c:/Users/katel/Desktop/HDF5%20Processing/plot_random_raw_vs_processed.py)
+  Randomly selects a sensor file and plots raw vs processed signals for visual checking.
 
-path efficiency = displacement / path length
+## Sensor Filtering
 
-4. Movement structure
-Number of movement units (movement_units)
+You can choose to include or exclude specific sensor IDs during reach detection.
 
-What it is:
-The number of acceleration–deceleration cycles within a reach.
+This can now be done in two ways:
 
-How it’s computed:
+1. Through prompts when the pipeline starts
+   The program will ask:
+   - which sensors to include
+   - which sensors to exclude
 
-Speed (or acceleration magnitude) is examined
+2. Through command-line options
 
-Each local maximum corresponds to one movement unit
+Examples:
 
-Interpretation:
+```powershell
+python main.py --project-root "C:\path\to\Project" --sensor-include "17738,21263"
+```
 
-1 unit → smooth, ballistic reach
+```powershell
+python main.py --project-root "C:\path\to\Project" --sensor-exclude "17794,21146"
+```
 
->1 units → corrective sub-movements
+This affects which sensors are included in:
 
-Often used in:
+- `Reach_Files`
+- `Reach_Metrics`
 
-Motor control
+## Detector Modes
 
-Rehabilitation studies
+The pipeline currently supports two reach detector modes:
 
-Fitts’ Law experiments
+- `fixed`
+  Uses the standard fixed thresholds
 
-5. Jerk metrics (movement smoothness)
+- `adaptive_baseline`
+  Estimates thresholds from the beginning of each file
 
-Jerk = derivative of acceleration
+If you are unsure which to use, start with:
 
-Mean jerk (jerk_mean)
+```text
+fixed
+```
 
-What it is:
-Average magnitude of jerk across the reach.
+## Notes For Non-Programmers
 
-What it tells you:
+- You do not need to create the output folders yourself.
+- You do not need to rename the generated files.
+- If you rerun the pipeline, existing output files may be overwritten.
+- If something looks wrong, a good first check is to compare:
+  - `Output_CSVs`
+  - `Processed_CSVs`
+  - `Reach_Metrics`
 
-Overall smoothness
+## Quick Start
 
-Higher values → more abrupt motion changes
+If you only remember one step, use this:
 
-RMS jerk (jerk_rms)
+```powershell
+python main.py
+```
 
-What it is:
-Root-mean-square jerk.
+Then:
 
-Why RMS is useful:
+1. Select the project folder containing `Raw_Data`
+2. Choose the participants
+3. Choose the detector mode
+4. Choose which sensors to include
+5. Choose which sensors to exclude
+6. Wait for the pipeline to finish
 
-Penalizes large spikes
+When it is done, look in:
 
-Standard smoothness metric in biomechanics
-
-Interpretation:
-
-Lower RMS jerk → smoother movement
-
-Often used as a clinical outcome measure
-
-Peak jerk (jerk_peak)
-
-What it is:
-Maximum instantaneous jerk.
-
-What it tells you:
-
-Sudden corrections
-
-Hesitations or impacts
-
-Possible segmentation errors if extremely high
-
-6. Important assumptions (very important)
-Initial velocity = 0
-
-Velocity is computed by integrating acceleration, assuming:
-
-The reach starts at rest
-
-This is reasonable if:
-
-Your reach detection starts at near-zero accel/gyro
-
-The subject pauses between reaches
-
-If not, velocity, speed, and path length will be biased.
-
-Mean acceleration detrending
-
-The code subtracts the mean acceleration within the reach before integration.
-
-Why this matters:
-
-Reduces drift from sensor bias
-
-Improves velocity and displacement estimates
-
-Summary table
-Metric	What it captures
-Duration	Speed of task completion
-Peak speed	Maximum movement intensity
-Avg speed	Overall movement intensity
-Avg velocity	Net directional motion
-Path length	Efficiency / smoothness
-Movement units	Sub-movements / corrections
-Time to peak	Ballistic vs. controlled motion
-Jerk metrics	Smoothness / motor control
+- `Output_CSVs`
+- `Processed_CSVs`
+- `Reach_Files`
+- `Reach_Metrics`

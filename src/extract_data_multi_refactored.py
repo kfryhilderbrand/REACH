@@ -158,6 +158,40 @@ def dataset_to_columns(ds: h5py.Dataset, prefix: Optional[str] = None) -> Dict[s
     return columns
 
 
+def add_orientation_columns(
+    df: pd.DataFrame,
+    h5_file: h5py.File,
+    sensor_id: str,
+) -> None:
+    """
+    Add orientation quaternion columns from /Processed/<sensor_id>/Orientation when
+    available and aligned to the sensor time series.
+    """
+    orientation_path = f"Processed/{sensor_id}/Orientation"
+    if orientation_path not in h5_file:
+        return
+
+    orientation_ds = h5_file[orientation_path]
+    orientation = orientation_ds[()]
+
+    if orientation.ndim != 2 or orientation.shape[1] != 4:
+        print(
+            f"Skipping {orientation_ds.name}: expected shape (n, 4), "
+            f"got {orientation.shape}"
+        )
+        return
+
+    if orientation.shape[0] != len(df):
+        print(
+            f"Skipping {orientation_ds.name}: length {orientation.shape[0]} "
+            f"!= time length {len(df)}"
+        )
+        return
+
+    for i in range(4):
+        df[f"orientation_{i}"] = orientation[:, i]
+
+
 def build_sensor_dataframe(
     sensor_group: h5py.Group,
     time_keywords=("time", "timestamp"),
@@ -233,6 +267,8 @@ def extract_sensor_csvs_from_h5(
             except ValueError as e:
                 print(f"Skipping sensor {sensor_id} in {h5_path.name}: {e}")
                 continue
+
+            add_orientation_columns(df, f, sensor_id)
 
             out_name = f"{h5_path.stem}_sensor-{sensor_id}.csv"
             out_path = output_dir / out_name

@@ -1,7 +1,8 @@
-/Output_CSVs/
-/Raw_Data/
-/Processed_CSVs/
+*/Output_CSVs/
+*/Raw_Data/
+*/Processed_CSVs/
 /Archive/
-/Reach_Files/
-/Reach_Metrics/
+*/Reach_Files/
+*/Reach_Metrics/
 /__pycache__/
+*/__pycache__/

@@ -19,7 +19,7 @@ def _trapz(y: np.ndarray, t: np.ndarray) -> float:
     # Robust trapezoid integration
     if len(y) < 2:
         return 0.0
-    return float(np.trapz(y, t))
+    return float(np.trapezoid(y, t))
 
 def _cumtrapz(y: np.ndarray, t: np.ndarray) -> np.ndarray:
     """

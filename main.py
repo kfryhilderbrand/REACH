@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import h5py
+import scipy
+import pandas
 import re
 import subprocess
 from pathlib import Path
